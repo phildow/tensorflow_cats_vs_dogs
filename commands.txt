@@ -1,0 +1,126 @@
+# Acquire the data from kaggle
+# Follow the instructions at https://github.com/Kaggle/kaggle-api to set up your environment
+
+kaggle competitions download dogs-vs-cats
+tar -xvzf train.zip
+
+# Move the unzipped data into the dataset/original directory
+
+# Partition the original train.zip dataset into training, validation, and test sets
+
+mkidr dataset/sample
+
+python utils/partition-images.py \
+  --input-dir dataset/original/train \
+  --output-dir dataset/sample_x \
+  --count 2000 \
+  --partition 50/25/25
+
+# Resize the images to 128x128
+
+mkdir dataset/sample_resized
+
+python utils/resize-images.py \
+  --input-dir dataset/sample \
+  --output-dir dataset/sample_resized \
+  --target-dim 128
+
+# Create training TF Records from the resized images
+
+mkdir tfrecords/train
+
+python create_tfrecords.py \
+  --input-dir dataset/sample_resized/train \
+  --output-dir tfrecords/train
+
+# Create validation TF Records from the resized images
+
+mkdir tfrecords/validation
+
+python create_tfrecords.py \
+  --input-dir dataset/sample_resized/validation \
+  --output-dir tfrecords/validation
+
+# Create test TF Records from the resized images
+
+mkdir tfrecords/test
+
+python create_tfrecords.py \
+  --input-dir dataset/sample_resized/test \
+  --output-dir tfrecords/test \
+  --predict-set true
+
+# Train a mobilenet model
+
+mkdir tmp/training
+
+python train.py \
+  --train-input tfrecords/train/cats.tfrecords,tfrecords/train/dogs.tfrecords \
+  --validate-input tfrecords/validation/cats.tfrecords,tfrecords/validation/dogs.tfrecords \
+  --model-dir tmp/training \
+  --batch 32 \
+  --epochs 1000 \
+  --dims 128 \
+  --verbose
+
+# Batch prediction on test TF Records
+
+python predict.py \
+  --predict-tfrecords tfrecords/test/cats.tfrecords \
+  --model-dir tmp/training \
+  --dims 128 \
+  --batch 32
+
+python predict.py \
+  --predict-tfrecords tfrecords/test/dogs.tfrecords \
+  --model-dir tmp/training \
+  --dims 128 \
+  --batch 32
+
+## Peparing for mobile deployment
+
+# Export the model
+
+python export.py \
+  --model-dir tmp/training \
+  --output-dir tmp/export \
+  --dims 128
+
+# Information about the exported graph, including inputs and outputs
+
+EXPORT_ID={...}
+
+saved_model_cli show \
+  --dir tmp/export/$EXPORT_ID \
+  --tag_set serve \
+  --signature_def serving_default
+
+# Predict with the saved model on a single image file input
+
+EXPORT_ID={...}
+PREDICT_FILENAME={...}
+
+python predict.py \
+  --predict-single $PREDICT_FILENAME \
+  --saved-model tmp/export/$EXPORT_ID \
+  --batch 1 \
+  --dims 128
+
+# Freeze the graph
+
+EXPORT_ID={...}
+
+freeze_graph \
+  --input_saved_model_dir tmp/export/$EXPORT_ID \
+  --output_graph tmp/frozen_graph.pb \
+  --output_node_names sigmoid
+
+# Convert the graph to tensorflow lite
+
+toco \
+  --graph_def_file tmp/frozen_graph.pb \
+  --output_file tmp/model.tflite \
+  --inference_type FLOAT \
+  --input_arrays image \
+  --input_shapes 1,128,128,3 \
+  --output_arrays sigmoid
