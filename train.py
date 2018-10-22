@@ -9,9 +9,23 @@ from models import model
 
 # model training
 
-def train_model(train_filenames, validate_filenames, batch_size, num_epochs, dims, model_dir):
+def train_model(train_filenames, validate_filenames, batch_size, num_epochs, model_dir, params):
+  """
+  Trains a model on a set of training records and validates it against a set of validation records
+
+  Args:
+
+  1. train_filenames: a list of TF Record filepaths for validation
+  2. validate_filenames: a list of TF Record filepaths for validation
+  3. batch_size: the batch size to use for training
+  4. num_epochs: the number of epochs to use for training
+  5. model_dir: the directory where model state (checkpoints) should be saved during training
+  6. params: a dictionary of model parameters:
+      - target_dim: the size of an image along a single dimension, e.g. 128, 224, etc
+  """
+  
   estimator = tf.estimator.Estimator(model_fn=model.model_fn, model_dir=model_dir)
-  input_params = {'target_dim': dims}
+  input_params = params
 
   train_spec = tf.estimator.TrainSpec(
     input_fn=lambda:training_input.input_fn(train_filenames, batch_size, num_epochs, input_params),
@@ -28,7 +42,7 @@ def train_model(train_filenames, validate_filenames, batch_size, num_epochs, dim
 # Running the script
 
 def generate_arg_parser():
-  parser = argparse.ArgumentParser(description="Train a basic DNN on the MNIST digits dataset")
+  parser = argparse.ArgumentParser(description="Train a mobilenet classifier on the kaggle dogs vs cats dataset")
 
   parser.add_argument(
     '--train-input',
@@ -87,13 +101,19 @@ if __name__ == '__main__':
     print('Running in verbose mode')
     tf.logging.set_verbosity(tf.logging.INFO)
 
+  # parameters
+
   train_filenames = [s.strip() for s in args.train_input.split(',')]
   validate_filenames = [s.strip() for s in args.validate_input.split(',')]
+
+  params = {
+    'target_dim': args.dims
+  }
 
   train_model(
     train_filenames=train_filenames,
     validate_filenames=validate_filenames,
     batch_size=args.batch, 
     num_epochs=args.epochs, 
-    dims=args.dims,
-    model_dir=args.model_dir)
+    model_dir=args.model_dir,
+    params=params)

@@ -108,18 +108,20 @@ if __name__ == '__main__':
     print('Running in verbose mode')
     tf.logging.set_verbosity(tf.logging.INFO)
 
+  # parameters
+
+  params = {
+    'target_dim': args.dims
+  }
+
   # single or tf record prediction
 
   if args.predict_single is not None:
-    predict_single(args.predict_single, args.saved_model, {
-      'target_dim': args.dims
-    })
+    predict_single(args.predict_single, args.saved_model, params)
   else:
     predict_tfrecords(
       predict_filenames=[args.predict_tfrecords], 
       batch_size=args.batch,
       model_dir=args.model_dir,
-      params={
-        'target_dim': args.dims
-      })
+      params=params)
 
